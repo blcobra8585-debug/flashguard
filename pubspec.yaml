@@ -1,0 +1,37 @@
+name: flashguard
+description: FlashGuard — Professional parental monitoring app.
+publish_to: 'none'
+version: 2.0.0+1
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  firebase_core: ^3.6.0
+  firebase_auth: ^5.3.1
+  firebase_database: ^11.1.4
+  firebase_storage: ^12.3.4
+  flutter_background_service: ^5.0.5
+  geolocator: ^13.0.1
+  geocoding: ^3.0.0
+  camera: ^0.11.0+2
+  app_usage: ^3.0.0
+  notification_listener_service: ^0.8.0
+  flutter_local_notifications: ^17.2.3
+  permission_handler: ^11.3.1
+  google_fonts: ^6.2.1
+  fl_chart: ^0.69.0
+  intl: ^0.19.0
+  path_provider: ^2.1.4
+  shared_preferences: ^2.3.3
+  uuid: ^4.4.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: tru

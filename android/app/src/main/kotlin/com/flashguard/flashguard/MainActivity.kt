@@ -212,16 +212,13 @@ class MainActivity : FlutterActivity() {
     // ── Actual screenshot capture via VirtualDisplay + ImageReader ────────────
     private fun captureScreen(mp: MediaProjection, path: String, result: MethodChannel.Result) {
         try {
-            @Suppress("DEPRECATION")
-            val metrics = DisplayMetrics()
-            @Suppress("DEPRECATION")
-            windowManager.defaultDisplay.getMetrics(metrics)
-            val w       = metrics.widthPixels
-            val h       = metrics.heightPixels
-            val density = metrics.densityDpi
+            val dm = resources.displayMetrics
+            val w       = dm.widthPixels.takeIf { it > 0 } ?: 1080
+            val h       = dm.heightPixels.takeIf { it > 0 } ?: 1920
+            val density = dm.densityDpi.takeIf { it > 0 } ?: 420
 
             val reader = ImageReader.newInstance(w, h, PixelFormat.RGBA_8888, 2)
-            val vd = mp.createVirtualDisplay(
+            val vd: android.hardware.display.VirtualDisplay? = mp.createVirtualDisplay(
                 "FGScreen", w, h, density,
                 DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
                 reader.surface, null, null
@@ -231,26 +228,26 @@ class MainActivity : FlutterActivity() {
                 try {
                     val image = reader.acquireLatestImage()
                     if (image == null) {
-                        vd.release(); reader.close()
+                        vd?.release(); reader.close()
                         result.error("NO_FRAME", "No frame captured", null)
                         return@postDelayed
                     }
-                    val plane      = image.planes[0]
-                    val buf        = plane.buffer
-                    val rowPad     = plane.rowStride - plane.pixelStride * w
-                    val bmp        = Bitmap.createBitmap(
+                    val plane  = image.planes[0]
+                    val buf    = plane.buffer
+                    val rowPad = plane.rowStride - plane.pixelStride * w
+                    val bmp    = Bitmap.createBitmap(
                         w + rowPad / plane.pixelStride, h, Bitmap.Config.ARGB_8888)
                     bmp.copyPixelsFromBuffer(buf)
-                    val cropped    = Bitmap.createBitmap(bmp, 0, 0, w, h)
+                    val cropped = Bitmap.createBitmap(bmp, 0, 0, w, h)
                     image.close()
-                    vd.release(); reader.close()
+                    vd?.release(); reader.close()
 
                     FileOutputStream(path).use { fos ->
                         cropped.compress(Bitmap.CompressFormat.JPEG, 72, fos)
                     }
                     result.success(path)
                 } catch (e: Exception) {
-                    try { vd.release(); reader.close() } catch (_: Exception) {}
+                    try { vd?.release(); reader.close() } catch (_: Exception) {}
                     result.error("CAPTURE_FAILED", e.message, null)
                 }
             }, 600L)

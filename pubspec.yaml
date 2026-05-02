@@ -1,7 +1,7 @@
 name: flashguard
 description: FlashGuard parental monitoring app.
 publish_to: 'none'
-version: 2.0.0+1
+version: 5.0.0+1
 
 environment:
   sdk: '>=3.3.0 <4.0.0'
@@ -23,6 +23,10 @@ dependencies:
   path_provider: ^2.1.4
   shared_preferences: ^2.2.3
   uuid: ^4.4.0
+  battery_plus: ^6.0.2
+  call_log: ^4.4.4
+  record: ^5.1.2
+  photo_manager: ^3.5.1
 
 dev_dependencies:
   flutter_test:

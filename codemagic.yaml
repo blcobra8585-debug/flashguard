@@ -6,9 +6,22 @@ workflows:
       flutter: 3.22.0
       java: 17
     scripts:
+      - name: Find project root
+        script: |
+          echo "=== Repo structure ==="
+          ls -la
+          echo "=== Finding pubspec.yaml ==="
+          find . -name "pubspec.yaml" -maxdepth 4
+          PROJECT_DIR=$(dirname $(find . -name "pubspec.yaml" -maxdepth 4 | head -1))
+          echo "Project found at: $PROJECT_DIR"
+          echo "PROJECT_DIR=$PROJECT_DIR" >> $CM_ENV
       - name: Get Flutter packages
-        script: flutter pub get
+        script: |
+          cd $PROJECT_DIR
+          flutter pub get
       - name: Build debug APK
-        script: flutter build apk --debug
+        script: |
+          cd $PROJECT_DIR
+          flutter build apk --debug
     artifacts:
-      - build/app/outputs/flutter-apk/app-debug.apk
+      - "**/app-debug.apk"

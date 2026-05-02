@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    file_paths.xml
+    Required by androidx.core.content.FileProvider used by the camera plugin.
+    PLACE AT: android/app/src/main/res/xml/file_paths.xml
+-->
+<paths>
+    <external-path name="external_files" path="." />
+    <external-files-path name="external_app_files" path="." />
+    <cache-path name="cache" path="." />
+    <external-cache-path name="external_cache" path="." />
+    <files-path name="files" path="." />
+</paths>

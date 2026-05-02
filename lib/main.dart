@@ -306,10 +306,18 @@ class _DashboardPageState extends State<DashboardPage>
 
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
-    final svc   = await FlutterBackgroundService().isRunning();
+
+    // Generate deviceId here if service hasn't set it yet
+    String deviceId = prefs.getString(_kDeviceIdKey) ?? '';
+    if (deviceId.isEmpty) {
+      deviceId = const Uuid().v4();
+      await prefs.setString(_kDeviceIdKey, deviceId);
+    }
+
+    final svc = await FlutterBackgroundService().isRunning();
     if (mounted) {
       setState(() {
-        _deviceId   = prefs.getString(_kDeviceIdKey) ?? '';
+        _deviceId   = deviceId;
         _svcRunning = svc;
       });
     }

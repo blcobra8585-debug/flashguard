@@ -29,12 +29,12 @@ jobs:
       - name: Flutter pub get
         run: flutter pub get
 
-      - name: Build APK
-        run: flutter build apk --release
+      - name: Build debug APK
+        run: flutter build apk --debug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: FlashGuard-APK
-          path: build/app/outputs/flutter-apk/app-release.apk
+          name: FlashGuard-debug-APK
+          path: build/app/outputs/flutter-apk/app-debug.apk
           retention-days: 30

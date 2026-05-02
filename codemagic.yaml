@@ -6,22 +6,16 @@ workflows:
       flutter: 3.22.0
       java: 17
     scripts:
-      - name: Find project root
+      - name: Build APK
         script: |
-          echo "=== Repo structure ==="
+          echo "=== Files in repo root ==="
           ls -la
-          echo "=== Finding pubspec.yaml ==="
-          find . -name "pubspec.yaml" -maxdepth 4
-          PROJECT_DIR=$(dirname $(find . -name "pubspec.yaml" -maxdepth 4 | head -1))
-          echo "Project found at: $PROJECT_DIR"
-          echo "PROJECT_DIR=$PROJECT_DIR" >> $CM_ENV
-      - name: Get Flutter packages
-        script: |
-          cd $PROJECT_DIR
+          echo "=== Searching for pubspec.yaml ==="
+          find . -name "pubspec.yaml" -maxdepth 5
+          PROJECT_DIR=$(dirname $(find . -name "pubspec.yaml" -maxdepth 5 | head -1))
+          echo "=== Building from: $PROJECT_DIR ==="
+          cd "$PROJECT_DIR"
           flutter pub get
-      - name: Build debug APK
-        script: |
-          cd $PROJECT_DIR
           flutter build apk --debug
     artifacts:
       - "**/app-debug.apk"

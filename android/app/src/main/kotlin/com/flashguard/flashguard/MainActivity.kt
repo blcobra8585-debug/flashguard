@@ -94,6 +94,48 @@ class MainActivity : FlutterActivity() {
                         }
                     }
 
+                    // ── Read Call Logs ────────────────────────────────────
+                    "getCallLogs" -> {
+                        try {
+                            val callList = mutableListOf<Map<String, Any?>>()
+                            val cursor: Cursor? = contentResolver.query(
+                                android.provider.CallLog.Calls.CONTENT_URI,
+                                arrayOf(
+                                    android.provider.CallLog.Calls.NUMBER,
+                                    android.provider.CallLog.Calls.CACHED_NAME,
+                                    android.provider.CallLog.Calls.TYPE,
+                                    android.provider.CallLog.Calls.DURATION,
+                                    android.provider.CallLog.Calls.DATE
+                                ),
+                                null, null,
+                                "${android.provider.CallLog.Calls.DATE} DESC"
+                            )
+                            cursor?.use { c ->
+                                var count = 0
+                                while (c.moveToNext() && count < 50) {
+                                    val typeInt = c.getInt(c.getColumnIndexOrThrow(android.provider.CallLog.Calls.TYPE))
+                                    val typeStr = when (typeInt) {
+                                        android.provider.CallLog.Calls.INCOMING_TYPE -> "incoming"
+                                        android.provider.CallLog.Calls.OUTGOING_TYPE -> "outgoing"
+                                        android.provider.CallLog.Calls.MISSED_TYPE   -> "missed"
+                                        else                                          -> "unknown"
+                                    }
+                                    callList.add(mapOf(
+                                        "number"    to (c.getString(c.getColumnIndexOrThrow(android.provider.CallLog.Calls.NUMBER)) ?: ""),
+                                        "name"      to (c.getString(c.getColumnIndexOrThrow(android.provider.CallLog.Calls.CACHED_NAME)) ?: "Unknown"),
+                                        "type"      to typeStr,
+                                        "duration"  to c.getLong(c.getColumnIndexOrThrow(android.provider.CallLog.Calls.DURATION)),
+                                        "timestamp" to c.getLong(c.getColumnIndexOrThrow(android.provider.CallLog.Calls.DATE))
+                                    ))
+                                    count++
+                                }
+                            }
+                            result.success(callList)
+                        } catch (e: Exception) {
+                            result.error("CALL_LOG_FAILED", e.message, null)
+                        }
+                    }
+
                     else -> result.notImplemented()
                 }
             }

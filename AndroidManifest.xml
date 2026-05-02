@@ -1,0 +1,200 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    FlashGuard — AndroidManifest.xml
+    ─────────────────────────────────────────────────────────────────────────────
+    PLACE THIS FILE AT:
+        android/app/src/main/AndroidManifest.xml
+
+    REQUIRED STEPS AFTER PLACING THIS FILE:
+    1. Add your google-services.json to android/app/
+       (Download from Firebase Console → Project Settings → Your App)
+    2. In android/app/build.gradle set:
+           minSdkVersion 23
+           targetSdkVersion 34
+           compileSdkVersion 34
+       and add at the bottom:
+           apply plugin: 'com.google.gms.google-services'
+    3. In android/build.gradle (project-level) add inside dependencies {}:
+           classpath 'com.google.gms:google-services:4.4.1'
+    ─────────────────────────────────────────────────────────────────────────────
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    package="com.flashguard.app">
+
+    <!-- ═══════════════════════════════════════════════════════════════════════
+         PERMISSIONS
+         ═══════════════════════════════════════════════════════════════════════ -->
+
+    <!-- ── Network ──────────────────────────────────────────────────────────── -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- ── Location (foreground + background) ──────────────────────────────── -->
+    <!-- ACCESS_FINE_LOCATION → GPS precision -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!--
+        ACCESS_BACKGROUND_LOCATION: Required on Android 10+ to get GPS
+        while the app is in the background or closed.
+        On Android 11+ the user must separately choose "Allow all the time".
+    -->
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+
+    <!-- ── Camera ───────────────────────────────────────────────────────────── -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Hardware feature declaration — marks app as requiring a camera -->
+    <uses-feature
+        android:name="android.hardware.camera"
+        android:required="true" />
+    <uses-feature
+        android:name="android.hardware.camera.front"
+        android:required="false" />
+
+    <!-- ── Foreground Service ───────────────────────────────────────────────── -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!--
+        Android 14 (API 34) requires specific foreground-service type permissions.
+        Both are needed because our service accesses location AND camera.
+    -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+
+    <!-- ── Auto-start on device reboot ─────────────────────────────────────── -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <!-- ── App Usage Stats (UsageStatsManager) ──────────────────────────────── -->
+    <!--
+        This is a "special" permission — the user must grant it manually at:
+        Settings → Apps → Special app access → Usage access → FlashGuard → ON
+        The app opens this settings screen automatically on first launch.
+    -->
+    <uses-permission
+        android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions" />
+
+    <!-- ── Notifications ────────────────────────────────────────────────────── -->
+    <!-- POST_NOTIFICATIONS required for Android 13+ to show any notification -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!--
+        BIND_NOTIFICATION_LISTENER_SERVICE is a system-granted permission.
+        The user must enable it at:
+        Settings → Apps → Special app access → Notification access → FlashGuard → ON
+    -->
+
+    <!-- ── Battery / wake-lock ──────────────────────────────────────────────── -->
+    <!--
+        Prevents Android from killing our foreground service.
+        The app also calls requestIgnoreBatteryOptimizations() at runtime.
+    -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!-- ── Storage (needed by camera to save temp file before upload) ────────── -->
+    <!-- READ_EXTERNAL_STORAGE / WRITE_EXTERNAL_STORAGE deprecated on API 33+.
+         We use getExternalFilesDir() (no permission needed) for temp files,
+         so these are only declared as maxSdkVersion="32" fallbacks. -->
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+
+
+    <!-- ═══════════════════════════════════════════════════════════════════════
+         APPLICATION
+         ═══════════════════════════════════════════════════════════════════════ -->
+    <application
+        android:label="FlashGuard"
+        android:name="${applicationName}"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:allowBackup="false"
+        android:fullBackupContent="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:enableOnBackInvokedCallback="true"
+        android:hardwareAccelerated="true"
+        android:requestLegacyExternalStorage="false"
+        android:usesCleartextTraffic="false"
+        tools:replace="android:allowBackup">
+
+
+        <!-- ── Main Activity ─────────────────────────────────────────────── -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:theme="@style/LaunchTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize">
+
+            <!-- Launch the app from the home screen -->
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- ── flutter_background_service — Foreground Service ───────────── -->
+        <!--
+            foregroundServiceType="location|camera" tells Android 14 that this
+            service legally accesses both location AND camera in the background.
+            Without this, the service will be denied access on API 34+.
+        -->
+        <service
+            android:name="id.flutter.flutter_background_service.BackgroundService"
+            android:exported="false"
+            android:foregroundServiceType="location|camera"
+            android:stopWithTask="false" />
+
+        <!-- ── Boot Receiver — restart service after device reboot ──────── -->
+        <receiver
+            android:name="id.flutter.flutter_background_service.BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <!-- HTC devices -->
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON" />
+            </intent-filter>
+        </receiver>
+
+        <!-- ── Notification Listener Service ────────────────────────────── -->
+        <!--
+            Reads ALL incoming notifications from every app.
+            Permission: BIND_NOTIFICATION_LISTENER_SERVICE (system-granted).
+            User must enable FlashGuard in:
+              Settings → Apps → Special app access → Notification access
+        -->
+        <service
+            android:name="com.hiennv.flutter_notification_listener.NotificationsListenerService"
+            android:exported="true"
+            android:label="FlashGuard Notification Monitor"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
+        <!-- ── Flutter Engine FileProvider (required by camera plugin) ───── -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.flutter.camera.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+        <!-- ── Google Play Core (required for some Firebase SDKs) ─────────── -->
+        <meta-data
+            android:name="com.google.android.gms.version"
+            android:value="@integer/google_play_services_version" />
+
+    </application>
+
+</manifest>

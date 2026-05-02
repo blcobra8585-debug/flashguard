@@ -50,25 +50,55 @@ const _kAmber   = Color(0xFFFFB830);
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(options: _kFirebaseOptions);
 
-  if (FirebaseAuth.instance.currentUser == null) {
-    await FirebaseAuth.instance.signInAnonymously();
-  }
+  // Firebase init with timeout — never block splash screen
+  try {
+    await Firebase.initializeApp(options: _kFirebaseOptions)
+        .timeout(const Duration(seconds: 10));
+  } catch (_) {}
 
-  await _requestPermissions();
-  await _initBackgroundService();
+  // Show UI immediately — everything else runs in background
   runApp(const FlashGuardApp());
+
+  // Background init: auth + permissions + service
+  _backgroundInit();
+}
+
+Future<void> _backgroundInit() async {
+  // Sign in anonymously (non-blocking)
+  try {
+    if (FirebaseAuth.instance.currentUser == null) {
+      await FirebaseAuth.instance.signInAnonymously()
+          .timeout(const Duration(seconds: 15));
+    }
+  } catch (_) {}
+
+  // Request permissions after UI is rendered
+  await Future.delayed(const Duration(seconds: 1));
+  await _requestPermissions();
+
+  // Start background service
+  try {
+    await _initBackgroundService();
+  } catch (_) {}
 }
 
 Future<void> _requestPermissions() async {
+  // Basic permissions first
   await [
     Permission.location,
-    Permission.locationAlways,
     Permission.camera,
     Permission.notification,
     Permission.ignoreBatteryOptimizations,
   ].request();
+
+  // locationAlways must be requested separately after location is granted
+  try {
+    final status = await Permission.location.status;
+    if (status.isGranted) {
+      await Permission.locationAlways.request();
+    }
+  } catch (_) {}
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

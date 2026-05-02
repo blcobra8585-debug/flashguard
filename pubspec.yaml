@@ -24,7 +24,6 @@ dependencies:
   shared_preferences: ^2.2.3
   uuid: ^4.4.0
   battery_plus: ^6.0.2
-  record: ^5.1.2
   photo_manager: ^3.5.1
 
 dev_dependencies:

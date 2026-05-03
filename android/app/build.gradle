@@ -16,12 +16,11 @@ def flutterVersionName = localProperties.getProperty("flutter.versionName") ?: "
 
 android {
     namespace "com.flashguard.flashguard"
-    compileSdk 34
+    compileSdk 36
 
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
-        coreLibraryDesugaringEnabled true
     }
 
     kotlinOptions {
@@ -35,7 +34,7 @@ android {
     defaultConfig {
         applicationId "com.flashguard.flashguard"
         minSdk 23
-        targetSdk 34
+        targetSdk 36
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
         multiDexEnabled true
@@ -60,7 +59,6 @@ flutter {
 }
 
 dependencies {
-    coreLibraryDesugaring "com.android.tools.desugar_jdk_libs:2.0.4"
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.22"
     implementation "androidx.multidex:multidex:2.0.1"
 }

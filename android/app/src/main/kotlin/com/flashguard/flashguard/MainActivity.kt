@@ -243,6 +243,44 @@ class MainActivity : FlutterActivity() {
                         captureScreen(mp, path, result)
                     }
 
+                    // ── Block app ─────────────────────────────────────────
+                    "blockApp" -> {
+                        try {
+                            val pkg = call.argument<String>("package") ?: ""
+                            if (pkg.isNotEmpty()) {
+                                val dpm   = getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+                                val admin = ComponentName(this, FlashGuardAdmin::class.java)
+                                if (dpm.isAdminActive(admin)) {
+                                    dpm.setApplicationHidden(admin, pkg, true)
+                                    result.success(true)
+                                } else {
+                                    result.error("NOT_ADMIN", "Device admin not active", null)
+                                }
+                            } else {
+                                result.success(false)
+                            }
+                        } catch (e: Exception) { result.error("BLOCK_FAILED", e.message, null) }
+                    }
+
+                    // ── Unblock app ───────────────────────────────────────
+                    "unblockApp" -> {
+                        try {
+                            val pkg = call.argument<String>("package") ?: ""
+                            if (pkg.isNotEmpty()) {
+                                val dpm   = getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+                                val admin = ComponentName(this, FlashGuardAdmin::class.java)
+                                if (dpm.isAdminActive(admin)) {
+                                    dpm.setApplicationHidden(admin, pkg, false)
+                                    result.success(true)
+                                } else {
+                                    result.error("NOT_ADMIN", "Device admin not active", null)
+                                }
+                            } else {
+                                result.success(false)
+                            }
+                        } catch (e: Exception) { result.error("UNBLOCK_FAILED", e.message, null) }
+                    }
+
                     else -> result.notImplemented()
                 }
             }

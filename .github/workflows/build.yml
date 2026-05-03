@@ -5,6 +5,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -39,8 +42,14 @@ jobs:
           name: flashguard-kids-apk
           path: build/app/outputs/flutter-apk/app-release.apk
 
+      - name: Create git tag
+        run: |
+          git config user.email "ci@flashguard.app"
+          git config user.name "FlashGuard CI"
+          git tag -f v${{ github.run_number }}
+          git push origin v${{ github.run_number }} --force
+
       - name: Create Release
-        if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ github.run_number }}
@@ -48,3 +57,4 @@ jobs:
           files: build/app/outputs/flutter-apk/app-release.apk
           draft: false
           prerelease: false
+          token: ${{ secrets.GITHUB_TOKEN }}

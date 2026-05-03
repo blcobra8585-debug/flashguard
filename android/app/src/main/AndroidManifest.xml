@@ -80,7 +80,7 @@
         android:requestLegacyExternalStorage="true"
         android:usesCleartextTraffic="false">
 
-        <!-- Main activity — NO launcher intent here (icon hiding support) -->
+        <!-- Main activity with launcher intent enabled -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -89,19 +89,21 @@
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
             android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
             <meta-data
                 android:name="io.flutter.embedding.android.NormalTheme"
                 android:resource="@style/NormalTheme" />
         </activity>
 
-        <!-- Launcher alias — DISABLED by default, icon hidden from install -->
+        <!-- Activity Alias for Icon Hide/Show -->
         <activity-alias
             android:name=".MainActivityAlias"
             android:targetActivity=".MainActivity"
-            android:enabled="false"
             android:exported="true"
-            android:label="System Service"
-            android:icon="@mipmap/ic_launcher">
+            android:enabled="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

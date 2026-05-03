@@ -15,7 +15,6 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
@@ -105,20 +104,7 @@ Future<void> _requestPermissions() async {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 Future<void> _initBackgroundService() async {
-  final service     = FlutterBackgroundService();
-  final notifPlugin = FlutterLocalNotificationsPlugin();
-
-  await notifPlugin
-      .resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin>()
-      ?.createNotificationChannel(const AndroidNotificationChannel(
-        _kNotifChannelId, _kNotifChannelName,
-        description : '',
-        importance  : Importance.min,
-        playSound   : false,
-        showBadge   : false,
-        enableVibration: false,
-      ));
+  final service = FlutterBackgroundService();
 
   await service.configure(
     androidConfiguration: AndroidConfiguration(
